@@ -1,0 +1,870 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IMO Delegate Submission Portal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=Lora:ital,wght@0,400;0,500;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+  <script src="https://unpkg.com/mammoth@1.6.0/mammoth.browser.min.js"></script>
+  <script src="https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #f4f1ea; color: #1a2332; font-family: 'Lora', Georgia, serif; min-height: 100vh; }
+
+    .app { min-height: 100vh; display: flex; flex-direction: column; }
+    header { background: #1a2332; color: #f4f1ea; border-bottom: 3px solid #c9a961; }
+    .header-inner { max-width: 900px; margin: 0 auto; padding: 1rem 2rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; }
+    .header-brand { display: flex; align-items: center; gap: 1rem; }
+    .header-anchor { color: #c9a961; font-size: 1.8rem; line-height: 1; }
+    .header-eyebrow { font-family: 'JetBrains Mono', monospace; font-size: 0.6rem; letter-spacing: 0.25em; text-transform: uppercase; color: #c9a961; margin-bottom: 0.15rem; }
+    .header-title { font-family: 'Cormorant Garamond', serif; font-size: 1.5rem; font-weight: 500; line-height: 1.1; }
+    .header-title em { color: #c9a961; font-size: 1rem; font-style: normal; }
+    .user-pill { font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; letter-spacing: 0.15em; text-transform: uppercase; background: rgba(201,169,97,0.15); color: #c9a961; border: 1px solid rgba(201,169,97,0.3); padding: 0.3rem 0.75rem; }
+    .session-pill { font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; letter-spacing: 0.1em; text-transform: uppercase; background: rgba(255,255,255,0.06); color: #f4f1ea; border: 1px solid rgba(255,255,255,0.15); padding: 0.3rem 0.75rem; }
+    .btn { font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; letter-spacing: 0.15em; text-transform: uppercase; padding: 0.5rem 1rem; cursor: pointer; border: none; transition: background 0.15s; }
+    .btn-nav { background: transparent; color: #c9a961; border: 1px solid rgba(201,169,97,0.35); }
+    .btn-nav:hover { background: rgba(201,169,97,0.1); }
+    .btn-primary { background: #c9a961; color: #1a2332; }
+    .btn-primary:hover { background: #b8964e; }
+    .btn-ghost { background: transparent; color: #f4f1ea; border: 1px solid rgba(255,255,255,0.2); }
+    .btn-ghost:hover { background: rgba(255,255,255,0.08); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    main { flex: 1; max-width: 900px; margin: 0 auto; width: 100%; padding: 2rem; }
+
+    /* Login */
+    .login-wrap { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 2rem; background: #1a2332; }
+    .login-card { background: #f4f1ea; width: 100%; max-width: 680px; }
+    .login-header { padding: 2rem 2.5rem 1.5rem; border-bottom: 1px solid rgba(26,35,50,0.1); }
+    .login-body { padding: 2rem 2.5rem; position: relative; }
+    .login-search { width: 100%; border: 1px solid rgba(26,35,50,0.25); background: #fffbf2; padding: 0.6rem 0.9rem; font-family: 'Lora', serif; font-size: 0.95rem; color: #1a2332; margin-bottom: 1.25rem; outline: none; }
+    .login-search:focus { border-color: #c9a961; }
+    .names-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.4rem; max-height: none; }
+    .name-btn { background: #fffbf2; border: 1px solid rgba(26,35,50,0.15); padding: 0.6rem 0.9rem; text-align: left; cursor: pointer; font-family: 'Lora', serif; font-size: 0.9rem; color: #1a2332; transition: all 0.12s; }
+    .name-btn:hover { background: #1a2332; color: #f4f1ea; border-color: #1a2332; }
+    .names-section-label { font-family: 'JetBrains Mono', monospace; font-size: 0.6rem; letter-spacing: 0.2em; text-transform: uppercase; color: #5a6478; margin: 1rem 0 0.5rem; }
+    .names-section-label:first-child { margin-top: 0; }
+    .names-scroll { max-height: 420px; overflow-y: auto; }
+
+    .session-banner { font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; letter-spacing: 0.08em; padding: 0.6rem 0.9rem; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; }
+    .session-banner.active { background: rgba(158,207,158,0.15); border: 1px solid rgba(158,207,158,0.4); color: #3a6b3a; }
+    .session-banner.waiting { background: rgba(201,169,97,0.12); border: 1px solid rgba(201,169,97,0.35); color: #8b7346; }
+    .names-disabled { opacity: 0.4; pointer-events: none; filter: grayscale(0.4); }
+
+    /* Modal */
+    .modal-backdrop { position: fixed; inset: 0; z-index: 100; background: rgba(26,35,50,0.75); backdrop-filter: blur(2px); display: flex; align-items: center; justify-content: center; padding: 2rem; }
+    .pw-modal { background: #fffbf2; width: 100%; max-width: 420px; box-shadow: 0 30px 80px rgba(0,0,0,0.5); }
+    .pw-header { background: #1a2332; color: #f4f1ea; padding: 1.25rem 1.5rem; display: flex; align-items: center; justify-content: space-between; }
+    .pw-eyebrow { font-family: 'JetBrains Mono', monospace; font-size: 0.6rem; letter-spacing: 0.2em; text-transform: uppercase; color: #c9a961; margin-bottom: 0.2rem; }
+    .pw-title { font-family: 'Cormorant Garamond', serif; font-size: 1.35rem; font-weight: 500; }
+    .pw-body { padding: 1.5rem; }
+    .pw-text { font-size: 0.9rem; line-height: 1.55; color: #1a2332; margin-bottom: 1rem; }
+    .pin-input-row { display: flex; gap: 0.6rem; justify-content: center; margin-bottom: 1rem; }
+    .pin-digit { width: 48px; height: 58px; text-align: center; font-family: 'JetBrains Mono', monospace; font-size: 1.6rem; border: 1px solid rgba(26,35,50,0.25); background: #fffbf2; outline: none; }
+    .pin-digit:focus { border-color: #c9a961; }
+    .pw-error { font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: #8b3a3a; margin-top: 0.4rem; text-align: center; }
+    .pw-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; }
+    .modal-close { color: rgba(244,241,234,0.7); cursor: pointer; font-size: 1.2rem; background: none; border: none; line-height: 1; }
+    .modal-close:hover { color: #f4f1ea; }
+
+    /* Dashboard */
+    .dash-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px solid rgba(26,35,50,0.15); flex-wrap: wrap; gap: 0.75rem; }
+    .dash-title { font-family: 'Cormorant Garamond', serif; font-size: 1.8rem; font-weight: 500; }
+    .dash-sub { font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: #5a6478; letter-spacing: 0.1em; margin-top: 0.2rem; }
+
+    .empty { border: 2px dashed rgba(26,35,50,0.2); padding: 3rem 2rem; text-align: center; margin-bottom: 1.5rem; }
+    .empty-icon { font-size: 2.5rem; opacity: 0.3; margin-bottom: 1rem; }
+    .empty-title { font-family: 'Cormorant Garamond', serif; font-size: 1.4rem; font-weight: 500; margin-bottom: 0.4rem; }
+    .empty-sub { color: #5a6478; font-size: 0.9rem; }
+
+    .sub-card { background: #fffbf2; border: 1px solid rgba(26,35,50,0.15); padding: 1.1rem 1.3rem; margin-bottom: 0.6rem; }
+    .sub-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 0.5rem; }
+    .sub-card-subject { font-family: 'Cormorant Garamond', serif; font-size: 1.15rem; font-weight: 600; line-height: 1.3; }
+    .sub-card-meta { font-family: 'JetBrains Mono', monospace; font-size: 0.62rem; color: #5a6478; letter-spacing: 0.06em; margin-top: 0.3rem; }
+    .status-tag { font-family: 'JetBrains Mono', monospace; font-size: 0.6rem; letter-spacing: 0.1em; text-transform: uppercase; padding: 0.15rem 0.5rem; border: 1px solid; flex-shrink: 0; }
+    .status-submitted { border-color: rgba(122,180,212,0.5); color: #3a6b8b; background: rgba(122,180,212,0.1); }
+    .status-amended { border-color: rgba(201,169,97,0.5); color: #8b7346; background: rgba(201,169,97,0.1); }
+    .sub-card-preview { font-size: 0.85rem; color: #5a6478; line-height: 1.5; margin-top: 0.5rem; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .sub-card-actions { margin-top: 0.75rem; display: flex; gap: 0.5rem; }
+
+    /* Form */
+    .form-card { background: #fffbf2; border: 1px solid rgba(26,35,50,0.15); padding: 1.75rem; }
+    .form-field { margin-bottom: 1.25rem; }
+    .form-label { font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; letter-spacing: 0.15em; text-transform: uppercase; color: #5a6478; margin-bottom: 0.4rem; display: block; }
+    .form-input { width: 100%; border: 1px solid rgba(26,35,50,0.25); background: #fffbf2; padding: 0.6rem 0.8rem; font-family: 'Lora', serif; font-size: 0.95rem; color: #1a2332; outline: none; }
+    .form-input:focus { border-color: #c9a961; }
+    textarea.form-input { min-height: 220px; resize: vertical; font-family: 'Lora', serif; line-height: 1.6; }
+    .method-tabs { display: flex; background: #e8e3d6; padding: 2px; width: fit-content; margin-bottom: 1rem; }
+    .method-tab { padding: 0.45rem 1.1rem; font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; border: none; background: transparent; color: #1a2332; }
+    .method-tab.active { background: #1a2332; color: #f4f1ea; }
+    .file-drop { border: 2px dashed rgba(26,35,50,0.25); padding: 2rem; text-align: center; cursor: pointer; transition: border-color 0.15s; }
+    .file-drop:hover, .file-drop.drag-over { border-color: #c9a961; background: rgba(201,169,97,0.05); }
+    .file-drop-icon { font-size: 1.8rem; opacity: 0.4; margin-bottom: 0.5rem; }
+    .file-name-chip { display: inline-flex; align-items: center; gap: 0.5rem; background: rgba(158,207,158,0.15); border: 1px solid rgba(158,207,158,0.4); padding: 0.4rem 0.8rem; font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; margin-top: 0.75rem; }
+    .form-actions { display: flex; justify-content: flex-end; gap: 0.6rem; margin-top: 1.5rem; padding-top: 1.25rem; border-top: 1px solid rgba(26,35,50,0.1); }
+
+    /* Admin sessions panel */
+    .session-panel { background: #fffbf2; border: 1px solid rgba(26,35,50,0.15); padding: 1.25rem 1.5rem; margin-bottom: 1.5rem; }
+    .session-panel-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+    .session-current-name { font-family: 'Cormorant Garamond', serif; font-size: 1.3rem; font-weight: 600; }
+    .new-session-inline { display: flex; gap: 0.5rem; margin-top: 0.9rem; padding-top: 0.9rem; border-top: 1px solid rgba(26,35,50,0.1); }
+    .new-session-inline input { flex: 1; }
+    .session-filter-select { font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; padding: 0.4rem 0.6rem; border: 1px solid rgba(26,35,50,0.25); background: #fffbf2; }
+
+    .toast-container { position: fixed; bottom: 1rem; right: 1rem; z-index: 9999; display: flex; flex-direction: column; gap: 0.5rem; }
+    .toast { background: #1a2332; color: #f4f1ea; padding: 0.7rem 1.1rem; font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; letter-spacing: 0.08em; border-left: 3px solid #c9a961; max-width: 360px; box-shadow: 0 8px 30px rgba(0,0,0,0.3); animation: slideIn 0.25s ease; }
+    .toast.error { border-left-color: #c0392b; background: #8b3a3a; }
+    @keyframes slideIn { from { transform: translateX(120%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+    .loading { display: flex; align-items: center; justify-content: center; padding: 4rem; gap: 0.75rem; font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; letter-spacing: 0.15em; text-transform: uppercase; color: #5a6478; }
+    .spinner { width: 18px; height: 18px; border: 2px solid rgba(26,35,50,0.15); border-top-color: #c9a961; border-radius: 50%; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    @media (max-width: 640px) {
+      .header-inner { padding: 0.75rem 1rem; }
+      main { padding: 1rem; }
+      .names-grid { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+<div class="app" id="app"><div class="loading"><div class="spinner"></div> Loading…</div></div>
+<div class="toast-container" id="toasts"></div>
+
+<script>
+// ─── CONFIG ────────────────────────────────────────────────────────────────
+// PROTOTYPE — runs on its OWN separate Supabase project, fully isolated
+// from the live Statement Sorter database currently in use by interpreters.
+const SUPABASE_URL  = 'https://jvajrndypabgrqjwnoie.supabase.co';
+const SUPABASE_ANON = 'sb_publishable_Ecrhj7oVutZ6FW6YbVHElQ_5QfXb2zR';
+const ADMIN_KEY = '2026'; // same lightweight gate as the Statement Sorter — replace for production
+
+// Official IMO membership data sourced directly from IMO's own
+// member list (176 Member States + 3 Associate Members).
+const MEMBER_STATES = [
+  "Albania","Algeria","Angola","Antigua and Barbuda","Argentina","Armenia","Australia","Austria","Azerbaijan",
+  "Bahamas","Bahrain","Bangladesh","Barbados","Belarus","Belgium","Belize","Benin","Bolivia (Plurinational State of)",
+  "Bosnia and Herzegovina","Botswana","Brazil","Brunei Darussalam","Bulgaria","Cabo Verde","Cambodia","Cameroon",
+  "Canada","Chile","China","Colombia","Comoros","Congo","Cook Islands","Costa Rica","Croatia","Cuba","Cyprus",
+  "Czechia","Côte d'Ivoire","Democratic People's Republic of Korea","Democratic Republic of the Congo","Denmark",
+  "Djibouti","Dominica","Dominican Republic","Ecuador","Egypt","El Salvador","Equatorial Guinea","Eritrea","Estonia",
+  "Ethiopia","Fiji","Finland","France","Gabon","Gambia","Georgia","Germany","Ghana","Greece","Grenada","Guatemala",
+  "Guinea","Guinea-Bissau","Guyana","Haiti","Honduras","Hungary","Iceland","India","Indonesia",
+  "Iran (Islamic Republic of)","Iraq","Ireland","Israel","Italy","Jamaica","Japan","Jordan","Kazakhstan","Kenya",
+  "Kiribati","Kuwait","Kyrgyzstan","Latvia","Lebanon","Liberia","Libya","Lithuania","Luxembourg","Madagascar",
+  "Malawi","Malaysia","Maldives","Malta","Marshall Islands","Mauritania","Mauritius","Mexico","Monaco","Mongolia",
+  "Montenegro","Morocco","Mozambique","Myanmar","Namibia","Nauru","Nepal","Netherlands (Kingdom of the)",
+  "New Zealand","Nicaragua","Nigeria","North Macedonia","Norway","Oman","Pakistan","Palau","Panama",
+  "Papua New Guinea","Paraguay","Peru","Philippines","Poland","Portugal","Qatar","Republic of Korea",
+  "Republic of Moldova","Romania","Russian Federation","Saint Kitts and Nevis","Saint Lucia",
+  "Saint Vincent and the Grenadines","Samoa","San Marino","Sao Tome and Principe","Saudi Arabia","Senegal","Serbia",
+  "Seychelles","Sierra Leone","Singapore","Slovakia","Slovenia","Solomon Islands","Somalia","South Africa","Spain",
+  "Sri Lanka","Sudan","Suriname","Sweden","Switzerland","Syrian Arab Republic","Thailand","Timor-Leste","Togo",
+  "Tonga","Trinidad and Tobago","Tunisia","Turkmenistan","Tuvalu","Türkiye","Uganda","Ukraine","United Arab Emirates",
+  "United Kingdom of Great Britain and Northern Ireland","United Republic of Tanzania","United States of America",
+  "Uruguay","Vanuatu","Venezuela (Bolivarian Republic of)","Viet Nam","Yemen","Zambia","Zimbabwe",
+];
+
+// Associate Members — not full Member States, but do attend and submit
+// statements at IMO meetings
+const ASSOCIATE_MEMBERS = ["Faroe Islands", "Hong Kong, China", "Macao, China"];
+// Official IMO-accredited IGOs (observer status) and NGOs (consultative
+// status), by acronym, sourced directly from IMO's own published lists
+// (68 IGOs + 98 NGOs = 166 total; one acronym collision — ICC — is
+// disambiguated with the full name in brackets).
+const ORGANIZATIONS = [
+  "1992 FUND","AALCO","Abuja MoU","ACCOBAMS","ACS","Acuerdo de Viña del Mar","AFOS","ALADI","ATLAFCO","AU","BS MoU",
+  "BSC","CARICOM","CD","CEPT","CMoU","COCATRAM","Commonwealth Secretariat","Cospas-Sarsat","Council of Europe","CPPS",
+  "CTO","EC","ESA","FIT","HELCOM","IALA","ICES","ICRC","IHO","IMSO","INTERPOL","IOC","IOM","IOMoU","ISA","ITSO","IWC",
+  "LAS","MAIIF","Med MoU","MOESNA","MOWCA","NEAFC","OAPEC","OAS","OECD","OPEC","OSPAR Commision","OTIF","Paris MoU",
+  "PERSGA","PMAESA","PMAWCA","RCOC","ReCAAP-ISC","Riyadh MoU","ROPME","SACEP","SPC","SPREP","SRFC",
+  "Supplementary Fund","Tokyo MoU","UNIDROIT","UNWTO","WAEMU","WCO (CCC)","ACOPS","AMPP","ASEF","BEMA","BIC","BIMCO",
+  "CEA","CEFIC","CESA","CIMAC","CIRM","CLIA","CMI","CSC","DGAC","EDF","EUROMOT","FIATA","FISH Platform","FOEI",
+  "FONASBA","GAFTA","GlobalMET","Global TestNet","Greenpeace International","IACS","IADC","IAIN","IAMU","IAPH","IBIA",
+  "IBLA","IBTA","ICC (Inuit Circumpolar Council)","ICC (International Chamber of Commerce)","ICHCA","ICMA","ICOMIA",
+  "ICS","IEC","IFA","IFAW","IFSMA","IHMA","IICL","IIDM","IIMA","ILAMA","IMarEST","IMCA","IMHA","IMLA","IMPA","IMRF",
+  "INTERCARGO","INTERFERRY","InterManager","INTERPORTPOLICE","INTERTANKO","IOGP","IPCSA","IPEN","IPIECA","IPTA","ISO",
+  "ISSA","ISU","ISWAN","ITF","ITOPF","ITTC","IUCN","IUMI","IVODGA","IWMA","IWSA","MI","NEMO","NI","OCIMF",
+  "One Sea ry","P & I Clubs","Pacific Environment","Pew","PIANC","RINA","SGMF","SIGTTO","SYBAss","The Ocean Cleanup",
+  "TIC Council","WISTA International","WNTI","World Coatings Council","World Sailing","WSC","WWF","ZESTAs",
+];
+
+const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+
+// ─── STATE ───────────────────────────────────────────────────────────────────
+let state = {
+  view: 'login',
+  currentSession: null,      // { id, name, created_at } or null if none open yet
+  delegation: null,
+  pin: null,
+  submissions: [],
+  editingId: null,
+  submitMethod: 'text',
+  parsedFile: null,
+  isAdmin: false,
+  allSubmissions: [],
+  adminSessions: [],
+  adminSessionFilter: '',    // '' = all sessions
+};
+
+function setState(patch) { Object.assign(state, patch); render(); }
+
+function showToast(msg, isError) {
+  const c = document.getElementById('toasts');
+  const el = document.createElement('div');
+  el.className = 'toast' + (isError ? ' error' : '');
+  el.textContent = msg;
+  c.appendChild(el);
+  setTimeout(() => el.style.opacity = '0', 3500);
+  setTimeout(() => el.remove(), 3900);
+}
+
+function esc(str) {
+  return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+// ─── SUPABASE RPC CALLS ──────────────────────────────────────────────────────
+async function fetchCurrentSession() {
+  const { data, error } = await db.rpc('get_current_session');
+  if (error) { console.error(error); return null; }
+  return (data && data.length > 0) ? data[0] : null;
+}
+
+async function isRegistered(delegation, sessionId) {
+  const { data, error } = await db.rpc('is_delegation_registered', { p_delegation: delegation, p_session_id: sessionId });
+  if (error) { console.error(error); return false; }
+  return !!data;
+}
+
+async function registerPin(delegation, sessionId, pin) {
+  const { data, error } = await db.rpc('register_delegation_pin', { p_delegation: delegation, p_session_id: sessionId, p_pin: pin });
+  if (error) return { success: false, error: error.message };
+  return data;
+}
+
+async function fetchMySubmissions(delegation, pin, sessionId) {
+  const { data, error } = await db.rpc('list_my_submissions', { p_delegation: delegation, p_pin: pin, p_session_id: sessionId });
+  if (error) return { success: false, error: 'Incorrect PIN' };
+  return { success: true, submissions: data || [] };
+}
+
+async function submitNew(delegation, pin, sessionId, payload) {
+  const { data, error } = await db.rpc('submit_statement', {
+    p_delegation: delegation, p_pin: pin, p_session_id: sessionId,
+    p_subject: payload.subject, p_body: payload.body,
+    p_agenda_item: payload.agendaItem, p_kind: payload.kind,
+    p_filename: payload.filename || null,
+  });
+  if (error) return { success: false, error: error.message };
+  return data;
+}
+
+async function amendExisting(delegation, pin, sessionId, id, payload) {
+  const { data, error } = await db.rpc('amend_submission', {
+    p_delegation: delegation, p_pin: pin, p_session_id: sessionId, p_id: id,
+    p_subject: payload.subject, p_body: payload.body, p_agenda_item: payload.agendaItem,
+  });
+  if (error) return { success: false, error: error.message };
+  return data;
+}
+
+async function adminFetchAll(adminKey, sessionId) {
+  const { data, error } = await db.rpc('admin_list_all_submissions', { p_admin_key: adminKey, p_session_id: sessionId || null });
+  if (error) return { success: false, error: 'Not authorized' };
+  return { success: true, submissions: data || [] };
+}
+
+async function adminFetchSessions(adminKey) {
+  const { data, error } = await db.rpc('admin_list_sessions', { p_admin_key: adminKey });
+  if (error) return [];
+  return data || [];
+}
+
+async function adminCreateSession(adminKey, name) {
+  const { data, error } = await db.rpc('admin_create_session', { p_admin_key: adminKey, p_name: name });
+  if (error) return { success: false, error: error.message };
+  return data;
+}
+
+// ─── FILE PARSING ────────────────────────────────────────────────────────────
+async function parseUploadedFile(file) {
+  const ext = file.name.split('.').pop().toLowerCase();
+  if (ext === 'pdf') {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+    const buf = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+    let text = '';
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      text += content.items.map(it => it.str).join(' ') + '\n';
+    }
+    return { filename: file.name, kind: 'pdf', body: text.trim() };
+  } else if (ext === 'docx') {
+    const buf = await file.arrayBuffer();
+    const result = await mammoth.extractRawText({ arrayBuffer: buf });
+    return { filename: file.name, kind: 'docx', body: result.value.trim() };
+  }
+  throw new Error('Only PDF and Word (.docx) files are supported.');
+}
+
+// ─── RENDER ──────────────────────────────────────────────────────────────────
+function render() {
+  const app = document.getElementById('app');
+  if (state.view === 'login') return renderLoginView(app);
+  if (state.view === 'pin-setup') return renderPinSetupView(app);
+  if (state.view === 'pin-entry') return renderPinEntryView(app);
+  if (state.view === 'admin-login') return renderAdminLoginView(app);
+  if (state.view === 'admin-dashboard') return renderAdminDashboard(app);
+  if (state.view === 'dashboard') return renderDashboard(app);
+  if (state.view === 'new' || state.view === 'edit') return renderForm(app);
+}
+
+function renderLoginView(app) {
+  const hasSession = !!state.currentSession;
+  app.innerHTML = `
+    <div class="login-wrap">
+      <div class="login-card">
+        <div class="login-header">
+          <div class="header-eyebrow">International Maritime Organization</div>
+          <div style="font-family:'Cormorant Garamond',serif;font-size:2rem;font-weight:500;color:#1a2332;line-height:1.1;">Delegate Submission Portal</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:0.7rem;color:#5a6478;margin-top:0.35rem;">Select your delegation to submit or manage statements</div>
+        </div>
+        <div class="login-body">
+          <div class="session-banner ${hasSession ? 'active' : 'waiting'}">
+            ${hasSession
+              ? `<span>●</span> Current session: <strong>${esc(state.currentSession.name)}</strong>`
+              : `<span>⏳</span> No active session yet — waiting for Document Section to open this meeting`}
+          </div>
+          <input class="login-search" placeholder="Search country or organisation…" id="login-search" />
+          <div class="names-scroll ${hasSession ? '' : 'names-disabled'}" id="names-scroll"></div>
+          <div style="margin-top:1.5rem;padding-top:1rem;border-top:1px solid rgba(26,35,50,0.1);text-align:center;">
+            <button class="btn btn-nav" id="btn-admin-login" style="border-color:rgba(26,35,50,0.2);color:#5a6478;">Document Section Login</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  renderNameList('');
+  document.getElementById('login-search').addEventListener('input', e => renderNameList(e.target.value));
+  document.getElementById('btn-admin-login').addEventListener('click', () => setState({ view: 'admin-login' }));
+}
+
+function renderNameList(filter) {
+  const wrap = document.getElementById('names-scroll');
+  if (!wrap) return;
+  const f = filter.toLowerCase();
+  const states = MEMBER_STATES.filter(n => !f || n.toLowerCase().includes(f));
+  const associates = ASSOCIATE_MEMBERS.filter(n => !f || n.toLowerCase().includes(f));
+  const orgs = ORGANIZATIONS.filter(n => !f || n.toLowerCase().includes(f));
+
+  let html = '';
+  if (states.length) {
+    html += `<div class="names-section-label">Member States</div><div class="names-grid">`;
+    html += states.map(n => `<button class="name-btn" data-name="${esc(n)}">${esc(n)}</button>`).join('');
+    html += `</div>`;
+  }
+  if (associates.length) {
+    html += `<div class="names-section-label">Associate Members</div><div class="names-grid">`;
+    html += associates.map(n => `<button class="name-btn" data-name="${esc(n)}">${esc(n)}</button>`).join('');
+    html += `</div>`;
+  }
+  if (orgs.length) {
+    html += `<div class="names-section-label">Organisations &amp; Agencies</div><div class="names-grid">`;
+    html += orgs.map(n => `<button class="name-btn" data-name="${esc(n)}">${esc(n)}</button>`).join('');
+    html += `</div>`;
+  }
+  wrap.innerHTML = html || '<div style="color:#8a9ab0;padding:1rem;">No matches</div>';
+
+  wrap.querySelectorAll('.name-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (!state.currentSession) {
+        showToast('No active session yet — please wait for Document Section.', true);
+        return;
+      }
+      const name = btn.dataset.name;
+      const registered = await isRegistered(name, state.currentSession.id);
+      setState({ delegation: name, view: registered ? 'pin-entry' : 'pin-setup' });
+    });
+  });
+}
+
+function renderPinSetupView(app) {
+  app.innerHTML = `
+    <div class="login-wrap">
+      <div class="pw-modal">
+        <div class="pw-header">
+          <div><div class="pw-eyebrow">First submission — ${esc(state.currentSession.name)}</div><div class="pw-title">${esc(state.delegation)}</div></div>
+          <button class="modal-close" id="pin-cancel">✕</button>
+        </div>
+        <div class="pw-body">
+          <div class="pw-text">Create a 4-digit PIN for your delegation for this session (${esc(state.currentSession.name)}). You'll use this PIN to submit or amend statements during this session. A new PIN will be needed the next time Document Section opens a new session.</div>
+          <div class="pin-input-row">
+            ${[0,1,2,3].map(i => `<input class="pin-digit" type="password" inputmode="numeric" maxlength="1" data-pin-idx="${i}" />`).join('')}
+          </div>
+          <div class="pw-text" style="font-size:0.8rem;color:#5a6478;">Confirm PIN</div>
+          <div class="pin-input-row">
+            ${[0,1,2,3].map(i => `<input class="pin-digit" type="password" inputmode="numeric" maxlength="1" data-confirm-idx="${i}" />`).join('')}
+          </div>
+          <div class="pw-error" id="pin-error" style="display:none;"></div>
+          <div class="pw-actions">
+            <button class="btn" id="pin-cancel-2" style="color:#5a6478;">Cancel</button>
+            <button class="btn btn-primary" id="pin-save">Create PIN &amp; Continue</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  bindPinInputs('[data-pin-idx]');
+  bindPinInputs('[data-confirm-idx]');
+  const cancel = () => setState({ view: 'login', delegation: null });
+  document.getElementById('pin-cancel').addEventListener('click', cancel);
+  document.getElementById('pin-cancel-2').addEventListener('click', cancel);
+  document.getElementById('pin-save').addEventListener('click', async () => {
+    const pin = getPinValue('[data-pin-idx]');
+    const confirmPin = getPinValue('[data-confirm-idx]');
+    const err = document.getElementById('pin-error');
+    if (pin.length !== 4) { err.textContent = 'Enter a 4-digit PIN.'; err.style.display = 'block'; return; }
+    if (pin !== confirmPin) { err.textContent = 'PINs do not match.'; err.style.display = 'block'; return; }
+    const result = await registerPin(state.delegation, state.currentSession.id, pin);
+    if (!result.success) { err.textContent = result.error; err.style.display = 'block'; return; }
+    sessionStorage.setItem('delegate_name', state.delegation);
+    sessionStorage.setItem('delegate_pin', pin);
+    sessionStorage.setItem('delegate_session_id', state.currentSession.id);
+    setState({ pin, view: 'dashboard', submissions: [] });
+  });
+}
+
+function renderPinEntryView(app) {
+  app.innerHTML = `
+    <div class="login-wrap">
+      <div class="pw-modal">
+        <div class="pw-header">
+          <div><div class="pw-eyebrow">Enter PIN — ${esc(state.currentSession.name)}</div><div class="pw-title">${esc(state.delegation)}</div></div>
+          <button class="modal-close" id="pin-cancel">✕</button>
+        </div>
+        <div class="pw-body">
+          <div class="pin-input-row">
+            ${[0,1,2,3].map(i => `<input class="pin-digit" type="password" inputmode="numeric" maxlength="1" data-pin-idx="${i}" ${i===0?'autofocus':''} />`).join('')}
+          </div>
+          <div class="pw-error" id="pin-error" style="display:none;">Incorrect PIN</div>
+          <div class="pw-actions">
+            <button class="btn" id="pin-cancel-2" style="color:#5a6478;">Cancel</button>
+            <button class="btn btn-primary" id="pin-submit">Enter</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  bindPinInputs('[data-pin-idx]', true);
+  const cancel = () => setState({ view: 'login', delegation: null });
+  document.getElementById('pin-cancel').addEventListener('click', cancel);
+  document.getElementById('pin-cancel-2').addEventListener('click', cancel);
+  document.getElementById('pin-submit').addEventListener('click', submitPinEntry);
+}
+
+async function submitPinEntry() {
+  const pin = getPinValue('[data-pin-idx]');
+  const err = document.getElementById('pin-error');
+  if (pin.length !== 4) { err.style.display = 'block'; return; }
+  const result = await fetchMySubmissions(state.delegation, pin, state.currentSession.id);
+  if (!result.success) { err.style.display = 'block'; return; }
+  sessionStorage.setItem('delegate_name', state.delegation);
+  sessionStorage.setItem('delegate_pin', pin);
+  sessionStorage.setItem('delegate_session_id', state.currentSession.id);
+  setState({ pin, submissions: result.submissions, view: 'dashboard' });
+}
+
+function bindPinInputs(selector, submitOnComplete) {
+  const inputs = [...document.querySelectorAll(selector)];
+  inputs.forEach((inp, i) => {
+    inp.addEventListener('input', () => {
+      inp.value = inp.value.replace(/\D/g, '').slice(0, 1);
+      if (inp.value && inputs[i+1]) inputs[i+1].focus();
+      if (submitOnComplete && inputs.every(x => x.value)) submitPinEntry();
+    });
+    inp.addEventListener('keydown', e => {
+      if (e.key === 'Backspace' && !inp.value && inputs[i-1]) inputs[i-1].focus();
+    });
+  });
+  if (inputs[0]) setTimeout(() => inputs[0].focus(), 50);
+}
+function getPinValue(selector) {
+  return [...document.querySelectorAll(selector)].map(i => i.value).join('');
+}
+
+async function loadDashboard() {
+  const result = await fetchMySubmissions(state.delegation, state.pin, state.currentSession.id);
+  if (result.success) setState({ submissions: result.submissions });
+}
+
+// Re-checks whether a new session has started since login — called before
+// any write action (submit/amend) so a delegate mid-session-change gets a
+// clear message rather than a confusing failure.
+async function guardSessionStillCurrent() {
+  const latest = await fetchCurrentSession();
+  if (!latest || latest.id !== state.currentSession.id) {
+    showToast('A new session has started. Please refresh and set up a PIN for the new session.', true);
+    return false;
+  }
+  return true;
+}
+
+function renderDashboard(app) {
+  app.innerHTML = `
+    ${renderHeader()}
+    <main>
+      <div class="dash-header">
+        <div>
+          <div class="dash-title">Your Submissions</div>
+          <div class="dash-sub">${esc(state.currentSession.name)} · ${state.submissions.length} statement${state.submissions.length===1?'':'s'}</div>
+        </div>
+        <button class="btn btn-primary" id="btn-new">+ New Submission</button>
+      </div>
+      ${state.submissions.length === 0 ? `
+        <div class="empty">
+          <div class="empty-icon">📄</div>
+          <div class="empty-title">No submissions yet</div>
+          <div class="empty-sub">Click "+ New Submission" to submit your first statement for this session.</div>
+        </div>
+      ` : state.submissions.map(s => `
+        <div class="sub-card">
+          <div class="sub-card-top">
+            <div>
+              <div class="sub-card-subject">${esc(s.subject || '(untitled)')}</div>
+              <div class="sub-card-meta">${s.agenda_item ? 'Item ' + esc(s.agenda_item) + ' · ' : ''}${new Date(s.submitted_at).toLocaleString()}</div>
+            </div>
+            <span class="status-tag status-${s.status === 'amended' ? 'amended' : 'submitted'}">${esc(s.status)}</span>
+          </div>
+          ${s.body ? `<div class="sub-card-preview">${esc(s.body.slice(0,200))}</div>` : ''}
+          <div class="sub-card-actions">
+            <button class="btn btn-nav" data-amend-id="${esc(s.id)}">Amend</button>
+          </div>
+        </div>
+      `).join('')}
+    </main>
+  `;
+  document.getElementById('btn-new')?.addEventListener('click', () => setState({ view: 'new', submitMethod: 'text', parsedFile: null }));
+  document.querySelectorAll('[data-amend-id]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const s = state.submissions.find(x => x.id === btn.dataset.amendId);
+      setState({ view: 'edit', editingId: s.id, submitMethod: 'text' });
+    });
+  });
+  bindLogout();
+}
+
+function renderHeader() {
+  return `
+    <header>
+      <div class="header-inner">
+        <div class="header-brand">
+          <div class="header-anchor">⚓</div>
+          <div>
+            <div class="header-eyebrow">International Maritime Organization</div>
+            <div class="header-title">Delegate Portal <em>— Submissions</em></div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:0.6rem;flex-wrap:wrap;">
+          <span class="session-pill">${esc(state.currentSession?.name || '')}</span>
+          <span class="user-pill">${esc(state.delegation)}</span>
+          <button class="btn btn-ghost" id="btn-logout">Logout</button>
+        </div>
+      </div>
+    </header>
+  `;
+}
+
+function bindLogout() {
+  document.getElementById('btn-logout')?.addEventListener('click', () => {
+    sessionStorage.removeItem('delegate_name');
+    sessionStorage.removeItem('delegate_pin');
+    sessionStorage.removeItem('delegate_session_id');
+    setState({ view: 'login', delegation: null, pin: null, submissions: [] });
+  });
+}
+
+function renderForm(app) {
+  const isEdit = state.view === 'edit';
+  const existing = isEdit ? state.submissions.find(s => s.id === state.editingId) : null;
+
+  app.innerHTML = `
+    ${renderHeader()}
+    <main>
+      <div class="dash-header">
+        <div class="dash-title">${isEdit ? 'Amend Submission' : 'New Submission'}</div>
+        <button class="btn btn-nav" id="btn-back">← Back to submissions</button>
+      </div>
+      <div class="form-card">
+        <div class="form-field">
+          <label class="form-label">Agenda item</label>
+          <input class="form-input" id="f-agenda" placeholder="e.g. 5, 9, 11" value="${esc(existing?.agenda_item || '')}" style="max-width:200px;" />
+        </div>
+        <div class="form-field">
+          <label class="form-label">Subject</label>
+          <input class="form-input" id="f-subject" placeholder="e.g. Statement on Agenda Item 5" value="${esc(existing?.subject || '')}" />
+        </div>
+
+        ${!isEdit ? `
+        <div class="form-field">
+          <label class="form-label">Submission method</label>
+          <div class="method-tabs">
+            <button class="method-tab ${state.submitMethod==='text'?'active':''}" data-method="text">Type directly</button>
+            <button class="method-tab ${state.submitMethod==='file'?'active':''}" data-method="file">Upload PDF / Word</button>
+          </div>
+        </div>
+        ` : ''}
+
+        ${(isEdit || state.submitMethod === 'text') ? `
+          <div class="form-field">
+            <label class="form-label">Statement text</label>
+            <textarea class="form-input" id="f-body" placeholder="Type your statement here…">${esc(existing?.body || '')}</textarea>
+          </div>
+        ` : `
+          <div class="form-field">
+            <label class="form-label">Upload file</label>
+            <div class="file-drop" id="file-drop">
+              <div class="file-drop-icon">📄</div>
+              <div>Drop a PDF or Word file here, or click to browse</div>
+              <input type="file" id="file-input" accept=".pdf,.docx" style="display:none;" />
+              ${state.parsedFile ? `<div class="file-name-chip">✓ ${esc(state.parsedFile.filename)}</div>` : ''}
+            </div>
+          </div>
+        `}
+
+        <div class="form-actions">
+          <button class="btn" id="btn-cancel-form" style="color:#5a6478;">Cancel</button>
+          <button class="btn btn-primary" id="btn-submit-form">${isEdit ? 'Save Amendment' : 'Submit Statement'}</button>
+        </div>
+      </div>
+    </main>
+  `;
+
+  document.getElementById('btn-back').addEventListener('click', () => setState({ view: 'dashboard' }));
+  document.getElementById('btn-cancel-form').addEventListener('click', () => setState({ view: 'dashboard' }));
+  bindLogout();
+
+  document.querySelectorAll('[data-method]').forEach(btn => {
+    btn.addEventListener('click', () => setState({ submitMethod: btn.dataset.method, parsedFile: null }));
+  });
+
+  const fileDrop = document.getElementById('file-drop');
+  if (fileDrop) {
+    const fileInput = document.getElementById('file-input');
+    fileDrop.addEventListener('click', () => fileInput.click());
+    fileDrop.addEventListener('dragover', e => { e.preventDefault(); fileDrop.classList.add('drag-over'); });
+    fileDrop.addEventListener('dragleave', () => fileDrop.classList.remove('drag-over'));
+    fileDrop.addEventListener('drop', async e => {
+      e.preventDefault(); fileDrop.classList.remove('drag-over');
+      const file = e.dataTransfer.files[0];
+      if (file) await handleFileUpload(file);
+    });
+    fileInput.addEventListener('change', async e => {
+      const file = e.target.files[0];
+      if (file) await handleFileUpload(file);
+    });
+  }
+
+  document.getElementById('btn-submit-form').addEventListener('click', async () => {
+    if (!(await guardSessionStillCurrent())) return;
+
+    const agendaItem = document.getElementById('f-agenda').value.trim();
+    const subject = document.getElementById('f-subject').value.trim();
+    if (!subject) { showToast('Please enter a subject.', true); return; }
+
+    let body, kind, filename;
+    if (isEdit || state.submitMethod === 'text') {
+      body = document.getElementById('f-body').value.trim();
+      kind = 'text'; filename = null;
+      if (!body) { showToast('Please enter the statement text.', true); return; }
+    } else {
+      if (!state.parsedFile) { showToast('Please upload a file.', true); return; }
+      body = state.parsedFile.body; kind = state.parsedFile.kind; filename = state.parsedFile.filename;
+    }
+
+    if (isEdit) {
+      const result = await amendExisting(state.delegation, state.pin, state.currentSession.id, state.editingId, { subject, body, agendaItem });
+      if (!result.success) { showToast(result.error, true); return; }
+      showToast('✓ Amendment saved');
+    } else {
+      const result = await submitNew(state.delegation, state.pin, state.currentSession.id, { subject, body, agendaItem, kind, filename });
+      if (!result.success) { showToast(result.error, true); return; }
+      showToast('✓ Statement submitted');
+    }
+    await loadDashboard();
+    setState({ view: 'dashboard' });
+  });
+}
+
+async function handleFileUpload(file) {
+  try {
+    showToast('Reading file…');
+    const parsed = await parseUploadedFile(file);
+    setState({ parsedFile: parsed });
+  } catch (e) {
+    showToast(e.message, true);
+  }
+}
+
+// ─── ADMIN (Document Section) VIEWS ─────────────────────────────────────────
+function renderAdminLoginView(app) {
+  app.innerHTML = `
+    <div class="login-wrap">
+      <div class="pw-modal">
+        <div class="pw-header">
+          <div><div class="pw-eyebrow">Restricted access</div><div class="pw-title">Document Section</div></div>
+          <button class="modal-close" id="admin-cancel">✕</button>
+        </div>
+        <div class="pw-body">
+          <input class="form-input" type="password" id="admin-key-input" placeholder="Enter admin password" autofocus />
+          <div class="pw-error" id="admin-error" style="display:none;">Incorrect password</div>
+          <div class="pw-actions">
+            <button class="btn" id="admin-cancel-2" style="color:#5a6478;">Cancel</button>
+            <button class="btn btn-primary" id="admin-submit">Enter</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  const cancel = () => setState({ view: 'login' });
+  document.getElementById('admin-cancel').addEventListener('click', cancel);
+  document.getElementById('admin-cancel-2').addEventListener('click', cancel);
+  const submit = async () => {
+    const key = document.getElementById('admin-key-input').value;
+    const result = await adminFetchAll(key, null);
+    if (!result.success) { document.getElementById('admin-error').style.display = 'block'; return; }
+    const sessions = await adminFetchSessions(key);
+    setState({ isAdmin: true, allSubmissions: result.submissions, adminSessions: sessions, adminSessionFilter: '', view: 'admin-dashboard' });
+  };
+  document.getElementById('admin-submit').addEventListener('click', submit);
+  document.getElementById('admin-key-input').addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
+}
+
+function renderAdminDashboard(app) {
+  const currentSession = state.adminSessions[0] || null; // most recent = current
+
+  app.innerHTML = `
+    <header>
+      <div class="header-inner">
+        <div class="header-brand">
+          <div class="header-anchor">⚓</div>
+          <div>
+            <div class="header-eyebrow">International Maritime Organization</div>
+            <div class="header-title">Delegate Portal <em>— Document Section</em></div>
+          </div>
+        </div>
+        <button class="btn btn-ghost" id="btn-admin-logout">Logout</button>
+      </div>
+    </header>
+    <main>
+      <div class="session-panel">
+        <div class="session-panel-row">
+          <div>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:#5a6478;">Current session</div>
+            <div class="session-current-name">${currentSession ? esc(currentSession.name) : '— None yet —'}</div>
+          </div>
+          <select class="session-filter-select" id="session-filter">
+            <option value="">All sessions</option>
+            ${state.adminSessions.map(s => `<option value="${esc(s.id)}" ${state.adminSessionFilter===s.id?'selected':''}>${esc(s.name)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="new-session-inline">
+          <input class="form-input" id="new-session-name" placeholder="e.g. NCSR 13 — Day 2" />
+          <button class="btn btn-primary" id="btn-new-session" style="flex-shrink:0;">+ Open New Session</button>
+        </div>
+      </div>
+
+      <div class="dash-header">
+        <div>
+          <div class="dash-title">Submissions</div>
+          <div class="dash-sub">${state.allSubmissions.length} total${state.adminSessionFilter ? ' in this session' : ' across all sessions'}</div>
+        </div>
+      </div>
+      ${state.allSubmissions.length === 0 ? `
+        <div class="empty"><div class="empty-icon">📭</div><div class="empty-title">No submissions yet</div></div>
+      ` : state.allSubmissions.map(s => `
+        <div class="sub-card">
+          <div class="sub-card-top">
+            <div>
+              <div class="sub-card-subject">${esc(s.delegation)} — ${esc(s.subject || '(untitled)')}</div>
+              <div class="sub-card-meta">${esc(s.session_name)} ${s.agenda_item ? '· Item ' + esc(s.agenda_item) : ''} · ${new Date(s.submitted_at).toLocaleString()}</div>
+            </div>
+            <span class="status-tag status-${s.status === 'amended' ? 'amended' : 'submitted'}">${esc(s.status)}</span>
+          </div>
+          ${s.body ? `<div class="sub-card-preview">${esc(s.body.slice(0,200))}</div>` : ''}
+          <div class="sub-card-actions">
+            <button class="btn btn-nav" style="border-color:rgba(139,58,58,0.3);color:#8b3a3a;" data-admin-del="${esc(s.id)}">Remove</button>
+          </div>
+        </div>
+      `).join('')}
+    </main>
+  `;
+
+  document.getElementById('btn-admin-logout').addEventListener('click', () => setState({ isAdmin: false, view: 'login' }));
+
+  document.getElementById('session-filter').addEventListener('change', async (e) => {
+    const filterVal = e.target.value;
+    const result = await adminFetchAll(ADMIN_KEY, filterVal || null);
+    setState({ adminSessionFilter: filterVal, allSubmissions: result.submissions || [] });
+  });
+
+  document.getElementById('btn-new-session').addEventListener('click', async () => {
+    const nameInput = document.getElementById('new-session-name');
+    const name = nameInput.value.trim();
+    if (!name) { showToast('Enter a session name.', true); return; }
+    const result = await adminCreateSession(ADMIN_KEY, name);
+    if (!result.success) { showToast(result.error, true); return; }
+    showToast(`✓ Session "${name}" opened`);
+    const sessions = await adminFetchSessions(ADMIN_KEY);
+    const all = await adminFetchAll(ADMIN_KEY, state.adminSessionFilter || null);
+    setState({ adminSessions: sessions, allSubmissions: all.submissions || [] });
+  });
+
+  document.querySelectorAll('[data-admin-del]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (!confirm('Remove this submission permanently?')) return;
+      await db.rpc('admin_delete_submission', { p_admin_key: ADMIN_KEY, p_id: btn.dataset.adminDel });
+      const result = await adminFetchAll(ADMIN_KEY, state.adminSessionFilter || null);
+      setState({ allSubmissions: result.submissions || [] });
+    });
+  });
+}
+
+// ─── INIT ────────────────────────────────────────────────────────────────────
+async function init() {
+  const currentSession = await fetchCurrentSession();
+  state.currentSession = currentSession;
+
+  const savedName = sessionStorage.getItem('delegate_name');
+  const savedPin = sessionStorage.getItem('delegate_pin');
+  const savedSessionId = sessionStorage.getItem('delegate_session_id');
+
+  if (savedName && savedPin && savedSessionId && currentSession && savedSessionId === currentSession.id) {
+    // Cached login is for the SAME session that's still current — try to restore it
+    const result = await fetchMySubmissions(savedName, savedPin, currentSession.id);
+    if (result.success) {
+      state.delegation = savedName; state.pin = savedPin;
+      state.submissions = result.submissions; state.view = 'dashboard';
+    } else {
+      sessionStorage.removeItem('delegate_name');
+      sessionStorage.removeItem('delegate_pin');
+      sessionStorage.removeItem('delegate_session_id');
+    }
+  } else if (savedSessionId && currentSession && savedSessionId !== currentSession.id) {
+    // A new session has started since this delegate last logged in — clear
+    // the stale login so they're prompted to set up a fresh PIN
+    sessionStorage.removeItem('delegate_name');
+    sessionStorage.removeItem('delegate_pin');
+    sessionStorage.removeItem('delegate_session_id');
+  }
+
+  render();
+}
+
+init();
+</script>
+</body>
+</html>
